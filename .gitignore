@@ -1,0 +1,5 @@
+# PLAINTEXT — must stay out of the public repo or the password protection
+# is meaningless. _build.mjs encrypts it into index.html at build time.
+_source.html
+_payload.json
+.playwright-mcp/

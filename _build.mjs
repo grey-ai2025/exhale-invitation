@@ -1,4 +1,45 @@
-<!DOCTYPE html>
+// One-off build script: re-encrypts the invitation body and writes a new
+// password-gated index.html.
+//
+// To rebuild:  node _build.mjs
+// Password is read from PASSWORD env var, defaulting to 'Bespoke-2026'.
+//
+// _source.html holds the unencrypted invitation body (header/body/footer rows)
+// that gets injected after a correct password.
+
+import { readFileSync, writeFileSync } from 'node:fs';
+import { randomBytes, pbkdf2Sync, createCipheriv } from 'node:crypto';
+
+const PASSWORD = process.env.PASSWORD || 'Bespoke-2026';
+const ITER = 200000;
+
+// Read the unencrypted source content
+const sourceHtml = readFileSync(new URL('./_source.html', import.meta.url), 'utf8').trim();
+
+// Encrypt
+const salt = randomBytes(16);
+const iv = randomBytes(12);
+const key = pbkdf2Sync(PASSWORD, salt, ITER, 32, 'sha256');
+const cipher = createCipheriv('aes-256-gcm', key, iv);
+const ct = Buffer.concat([cipher.update(sourceHtml, 'utf8'), cipher.final()]);
+const tag = cipher.getAuthTag();
+const blob = Buffer.concat([ct, tag]); // Web Crypto AES-GCM expects ct||tag
+
+const payload = {
+  salt: salt.toString('base64'),
+  iv: iv.toString('base64'),
+  ct: blob.toString('base64'),
+  iter: ITER,
+};
+
+const out = buildPage(payload);
+writeFileSync(new URL('./index.html', import.meta.url), out, 'utf8');
+console.log('Encrypted', sourceHtml.length, 'chars ->', blob.length, 'bytes ciphertext');
+console.log('Wrote index.html (' + out.length + ' bytes)');
+
+function buildPage(payload) {
+  const payloadJson = JSON.stringify(payload);
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -102,7 +143,7 @@
   </tr>
 </table>
 
-<script id="payload" type="application/json">{"salt":"yOFP8FpT2xWnfAGeIs5epQ==","iv":"k3bIWwmejvELNPwC","ct":"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","iter":200000}</script>
+<script id="payload" type="application/json">${payloadJson}</script>
 <script>
 (function(){
   var SS_KEY = 'exhale_inv_unlock_v1';
@@ -172,3 +213,5 @@
 </script>
 </body>
 </html>
+`;
+}
